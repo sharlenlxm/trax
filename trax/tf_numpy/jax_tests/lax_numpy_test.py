@@ -528,12 +528,13 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
       if check_dtypes and hasattr(a, "dtype"):
         self.assertEqual(tf.as_dtype(a.dtype), b.dtype)
 
-    if check_incomplete_shape:
+    if check_incomplete_shape and all(hasattr(x, "dtype") for x in args):
       # Check partial shapes with known ranks
-      specs = [tf.TensorSpec([None] * len(x.shape), x.dtype) for x in args]
-      cfun = npe.jit(fun, input_signature=specs)
-      compiled_ans = cfun(*args)
-      self.assertAllClose(python_ans, compiled_ans, check_dtypes, atol, rtol)
+      if all(hasattr(x, "shape") for x in args):
+        specs = [tf.TensorSpec([None] * len(x.shape), x.dtype) for x in args]
+        cfun = npe.jit(fun, input_signature=specs)
+        compiled_ans = cfun(*args)
+        self.assertAllClose(python_ans, compiled_ans, check_dtypes, atol, rtol)
 
       # Check unknown ranks
       specs = [tf.TensorSpec(None, x.dtype) for x in args]
@@ -824,7 +825,6 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
           ("matrix-tensor", (5, 2), (3, 2, 4)),
           ("tensor-tensor", (2, 3, 4), (5, 4, 1))]
       for lhs_dtype, rhs_dtype in CombosWithReplacement(number_dtypes, 2)))
-  @disable
   def testDot(self, lhs_shape, lhs_dtype, rhs_shape, rhs_dtype, rng_factory):
     rng = rng_factory()
     args_maker = lambda: [rng(lhs_shape, lhs_dtype), rng(rhs_shape, rhs_dtype)]
@@ -839,7 +839,7 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
     self._CheckAgainstNumpy(onp_dot, lnp.dot, args_maker, check_dtypes=True,
                             tol=tol)
     self._CompileAndCheck(lnp.dot, args_maker, check_dtypes=True, atol=tol,
-                          rtol=tol)
+                          rtol=tol, check_incomplete_shape=True)
 
   @named_parameters(jtu.cases_from_list(
       {"testcase_name": "_{}_{}_{}".format(
@@ -894,7 +894,6 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
           [(1, 2, 3, 4), (4, 5, 3, 6), [[2, 3], [2, 0]]],
       ]
       for lhs_dtype, rhs_dtype in CombosWithReplacement(number_dtypes, 2)))
-  @disable
   def testTensordot(self, lhs_shape, lhs_dtype, rhs_shape, rhs_dtype, axes, rng_factory):
     rng = rng_factory()
     args_maker = lambda: [rng(lhs_shape, lhs_dtype), rng(rhs_shape, rhs_dtype)]
@@ -910,7 +909,8 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
       tol[onp.float32] = tol[onp.complex64] = 2e-1
     self._CheckAgainstNumpy(onp_fun, lnp_fun, args_maker, check_dtypes=True,
                             tol=tol)
-    self._CompileAndCheck(lnp_fun, args_maker, check_dtypes=True)
+    self._CompileAndCheck(lnp_fun, args_maker, check_dtypes=True,
+                          check_incomplete_shape=True)
 
   @named_parameters(jtu.cases_from_list(
       {"testcase_name": "_{}_{}".format(
@@ -925,7 +925,6 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
       if len(jtu._dims_of_shape(lhs_shape)) == 0
       or len(jtu._dims_of_shape(rhs_shape)) == 0
       or lhs_shape[-1] == rhs_shape[-1]))
-  @disable
   def testInner(self, lhs_shape, lhs_dtype, rhs_shape, rhs_dtype, rng_factory):
     rng = rng_factory()
     args_maker = lambda: [rng(lhs_shape, lhs_dtype), rng(rhs_shape, rhs_dtype)]
@@ -944,7 +943,7 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
     self._CheckAgainstNumpy(onp_fun, lnp_fun, args_maker, check_dtypes=False,
                             tol=tol)
     self._CompileAndCheck(lnp_fun, args_maker, check_dtypes=False, atol=tol,
-                          rtol=tol)
+                          rtol=tol, check_incomplete_shape=True)
 
   @named_parameters(jtu.cases_from_list(
       {"testcase_name": "_{}_amin={}_amax={}".format(
